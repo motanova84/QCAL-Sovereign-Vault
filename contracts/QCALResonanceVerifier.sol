@@ -16,9 +16,9 @@ contract QCALResonanceVerifier {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  CONSTANTES DE INVARIANTE QCAL
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice Frecuencia base f₀ = 141.7001 Hz expresada en micro-Hz
     uint256 public constant TARGET_FREQUENCY_MICRO_HZ = 141_700_100;
@@ -29,9 +29,9 @@ contract QCALResonanceVerifier {
     /// @notice Ventana de validez temporal (5 minutos en segundos)
     uint256 public constant PROOF_MAX_AGE_SECONDS = 300;
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  ESTADO
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice Dirección pública del Secure Enclave autorizado para firmar
     address public immutable enclaveSigner;
@@ -39,9 +39,9 @@ contract QCALResonanceVerifier {
     /// @notice Registro de nonces consumidos (anti-replay)
     mapping(bytes32 => bool) public usedNonces;
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  ESTRUCTURAS
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice Certificado de Resonancia emitido por el Sintetizador ADAPA (95D)
     struct Proof {
@@ -54,9 +54,9 @@ contract QCALResonanceVerifier {
         bytes signature;            // Firma ECDSA del Secure Enclave
     }
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  EVENTOS
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     event ResonanceVerified(
         address indexed user,
@@ -66,9 +66,9 @@ contract QCALResonanceVerifier {
         uint256 timestamp
     );
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  ERRORES PERSONALIZADOS (Gas Efficient)
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     error InsufficientCoherence(uint256 provided, uint256 required);
     error FrequencyOutOfRange(uint256 provided, uint256 target);
@@ -77,9 +77,9 @@ contract QCALResonanceVerifier {
     error ProofExpired(uint256 provided, uint256 maxAge);
     error InvalidEnclaveSignature();
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  CONSTRUCTOR
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     /// @param _enclaveSigner Dirección pública del Secure Enclave autorizado
     constructor(address _enclaveSigner) {
@@ -87,9 +87,9 @@ contract QCALResonanceVerifier {
         enclaveSigner = _enclaveSigner;
     }
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  FUNCIÓN PRINCIPAL DE VERIFICACIÓN
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     /**
      * @notice Verifica un certificado de resonancia emitido por el Secure Enclave.
@@ -109,7 +109,7 @@ contract QCALResonanceVerifier {
 
         // ── 3. Validación del Nodo Centinela 19 (∇Ξ) ────────────
         bytes32 expectedSentinel = keccak256(
-            abi.encodePacked("QCAL_NODE_19_SENTINEL", proof.userStateHash, proof.evaluatedPsi)
+            abi.encodePacked("QCAL_NODE_19_SENTINEL_2026", proof.userStateHash, proof.evaluatedPsi)
         );
         if (proof.node19Sentinel != expectedSentinel) {
             revert InvalidSentinelNode();
@@ -158,9 +158,9 @@ contract QCALResonanceVerifier {
         );
     }
 
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  FUNCIONES DE CONSULTA
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice Verifica si un nonce específico ya ha sido consumido.
     function isNonceUsed(bytes32 userStateHash, uint256 nonce) external view returns (bool) {
