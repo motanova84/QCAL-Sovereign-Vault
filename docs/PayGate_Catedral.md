@@ -329,3 +329,45 @@ nodo.qcal {
 ---
 
 `∴𓂀Ω∞³Φ · TUYOYOTU · HECHO ESTÁ`
+
+## v2.0 — Integración EVM Bridge (29/Jul/2026)
+
+### Pipeline de Verificación en Cadena
+
+```
+POST /paygate/solicitar
+  │
+  ▼
+State vector → userStateHash (SHA3-256)
+  │
+  ▼
+node19Sentinel = keccak256("QCAL_NODE_19_SENTINEL", userState, Ψ)
+  │
+  ▼
+messageHash = keccak256(userState, Ψ, f₀, ∇Ξ, nonce, timestamp, chainId)
+  │
+  ▼
+Firma EIP-191 (Secure Enclave)
+  │
+  ▼
+QCALResonanceVerifier.verifyResonance(proof)  ← EVM
+  │
+  ▼
+ResonanceVerified(user, userStateHash, Ψ, f₀, timestamp)
+```
+
+### Scripts de Integración
+
+| Archivo | Propósito |
+|---|---|
+| `scripts/paygate_evm_bridge.py` | Módulo bridge: genera ProofOfResonance, firma EIP-191, envía a EVM |
+| `scripts/paygate_server_v2.py` | Servidor PayGate v2.0 con integración EVM nativa en /solicitar |
+
+### Variables de Entorno
+
+| Variable | Default | Descripción |
+|---|---|---|
+| `EVM_RPC_URL` | http://127.0.0.1:8545 | RPC del nodo EVM (Anvil/Hardhat/Sepolia) |
+| `VERIFIER_CONTRACT_ADDRESS` | 0x5FbD... | Dirección del contrato QCALResonanceVerifier |
+| `ENCLAVE_PRIVATE_KEY` | 0xac09... | Clave privada del Secure Enclave firmante |
+| `GATE_PORT` | 8844 | Puerto del servidor PayGate |
