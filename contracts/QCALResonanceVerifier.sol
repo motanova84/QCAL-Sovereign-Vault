@@ -14,7 +14,7 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
  */
 contract QCALResonanceVerifier {
     using ECDSA for bytes32;
-    using MessageHashUtils for bytes32;
+    
 
     // ═══════════════════════════════════════════════════════════════════════
     //  CONSTANTES DE INVARIANTE QCAL
@@ -109,7 +109,7 @@ contract QCALResonanceVerifier {
 
         // ── 3. Validación del Nodo Centinela 19 (∇Ξ) ────────────
         bytes32 expectedSentinel = keccak256(
-            abi.encodePacked("QCAL_NODE_19_SENTINEL_2026", proof.userStateHash, proof.evaluatedPsi)
+            abi.encodePacked("QCAL_NODE_19_SENTINEL", proof.userStateHash, proof.evaluatedPsi)
         );
         if (proof.node19Sentinel != expectedSentinel) {
             revert InvalidSentinelNode();
@@ -139,10 +139,10 @@ contract QCALResonanceVerifier {
                 proof.timestamp,
                 block.chainid
             )
-        ).toEthSignedMessageHash();
-
-        address recoveredSigner = messageHash.recover(proof.signature);
-        if (recoveredSigner != enclaveSigner) {
+        );
+        bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        address recovered = ethSignedHash.recover(proof.signature);
+        if (recovered != enclaveSigner) {
             revert InvalidEnclaveSignature();
         }
 

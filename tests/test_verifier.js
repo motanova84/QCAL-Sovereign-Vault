@@ -28,7 +28,7 @@ describe("QCALResonanceVerifier", function () {
 
         const node19Sentinel = ethers.solidityPackedKeccak256(
             ["string", "bytes32", "uint256"],
-            ["QCAL_NODE_19_SENTINEL_2026", userStateHash, evaluatedPsi]
+            ["QCAL_NODE_19_SENTINEL", userStateHash, evaluatedPsi]
         );
 
         const messageHash = ethers.solidityPackedKeccak256(
