@@ -19,16 +19,11 @@ module.exports = {
             evmVersion: "cancun",
         },
     },
-
     defaultNetwork: "hardhat",
-
     networks: {
         hardhat: {
             chainId: 31337,
-            mining: {
-                auto: true,
-                interval: 0,
-            },
+            mining: { auto: true, interval: 0 },
         },
         localhost: {
             url: "http://127.0.0.1:8545",
@@ -47,7 +42,6 @@ module.exports = {
             gasPrice: "auto",
         },
     },
-
     etherscan: {
         apiKey: {
             sepolia: ETHERSCAN_API_KEY,
@@ -64,14 +58,12 @@ module.exports = {
             },
         ],
     },
-
     paths: {
         sources: "./contracts",
         tests: "./tests",
         cache: "./cache",
         artifacts: "./artifacts",
     },
-
     gasReporter: {
         enabled: process.env.REPORT_GAS !== undefined,
         currency: "USD",

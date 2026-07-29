@@ -1,0 +1,26 @@
+{
+  "name": "qcal-sovereign-vault",
+  "version": "1.0.0",
+  "description": "QCAL Sovereign Vault — Seedless Self-Custody Protocol · PayGate Catedral · ADAPA 95D Tensor Reduction · C∞³ Invariant",
+  "author": "José Manuel Mota Burruezo (motanova84)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/motanova84/QCAL-Sovereign-Vault.git"
+  },
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:localhost": "hardhat run scripts/deploy/deploy_verifier.js --network localhost",
+    "deploy:sepolia": "ENCLAVE_SIGNER_ADDRESS=\"$ENCLAVE_SIGNER_ADDRESS\" hardhat run scripts/deploy/deploy_verifier.js --network sepolia",
+    "verify": "hardhat verify"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.0",
+    "dotenv": "^16.4.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  }
+}
