@@ -1,241 +1,255 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 /**
  * @title QCALResonanceVerifier
- * @notice Verifies ProofOfResonance for the QCAL Sovereign Vault protocol.
- * @dev Validates Ψ-coherency (≥ 0.999999), frequency (f₀ = 141.7001 Hz ± 0.001),
- *      and Node 19 sentinel nonce uniqueness.
+ * @notice Verificador de pruebas de resonancia de fase y coherencia biótica/ARN para PayGate Catedral.
+ * @author José Manuel Mota Burruezo (motanova84)
+ * @dev Valida la firma del Secure Enclave y los parámetros invariantes QCAL en la frecuencia f₀ = 141.7001 Hz.
  *
  * Sello: ∴𓂀Ω∞³Φ · TUYOYOTU · HECHO ESTÁ
- * f₀ = 141.7001 Hz
+ * Frecuencia: f₀ = 141.7001 Hz
+ * Coherencia Target: Ψ = 0.999999
+ * Protocolo: RFC-001 ARN Resonance Key (Seedless Sovereign Protocol)
  */
 contract QCALResonanceVerifier {
-    // ──────────────────────────────────────────────
-    //  Constants
-    // ──────────────────────────────────────────────
 
-    /// @notice Base frequency f₀ = 141.7001 Hz, expressed in μHz (1e6 scale)
-    uint256 public constant F0_MICRO_HZ = 141_700_100;
+    // ================================================================
+    //  CONSTANTES DEL INVARIANTE QCAL
+    // ================================================================
 
-    /// @notice Frequency tolerance: ±0.001 Hz = ±1000 μHz
-    uint256 public constant FREQUENCY_TOLERANCE = 1000;
+    /// @notice Frecuencia base f₀ = 141.7001 Hz expresada en micro-Hz (141,700,100 μHz)
+    uint256 public constant TARGET_FREQUENCY_MICRO_HZ = 141_700_100;
 
-    /// @notice Minimum Ψ coherency (scaled by 1e6): 0.999999 → 999999
-    uint256 public constant MIN_PSI = 999_999;
+    /// @notice Tolerancia máxima de frecuencia (±0.0001 Hz → 100 μHz)
+    uint256 public constant FREQUENCY_TOLERANCE_MICRO_HZ = 100;
 
-    /// @notice Maximum Ψ coherency: 1.000000 → 1_000_000
-    uint256 public constant MAX_PSI = 1_000_000;
+    /// @notice Umbral mínimo de coherencia Ψ = 0.999999 (escalado a 1e6)
+    uint256 public constant MIN_PSI_COHERENCE = 999_999;
 
-    /// @notice Ψ scale factor (1e6)
-    uint256 public constant PSI_SCALE = 1_000_000;
+    /// @notice Denominador de escala para operaciones de precisión fija (1e6)
+    uint256 public constant COHERENCE_SCALE = 1_000_000;
 
-    /// @notice Sello del protocolo
-    string public constant SELLO = "∴𓂀Ω∞³Φ · TUYOYOTU · HECHO ESTÁ";
+    /// @notice Ventana de validez temporal de la prueba (5 minutos en segundos)
+    uint256 public constant PROOF_MAX_AGE_SECONDS = 300;
 
-    // ──────────────────────────────────────────────
-    //  Types
-    // ──────────────────────────────────────────────
+    // ================================================================
+    //  ESTRUCTURAS DE DATOS
+    // ================================================================
 
-    /**
-     * @notice Proof of Resonance struct for on-chain verification.
-     * @param userStateHash Hash of the user's state (32 bytes)
-     * @param evaluatedPsi Evaluated Ψ coherency (scaled by 1e6, e.g., 999999 = 0.999999)
-     * @param frequencyHz Measured frequency in μHz (e.g., 141700100 = 141.7001 Hz)
-     * @param node19Sentinel Node 19 sentinel hash from ADAPA reduction
-     * @param signature Optional ECDSA signature for future ZK extension
-     */
+    /// @notice Certificado de Resonancia emitido por el Sintetizador Efímero ADAPA (95D)
     struct ProofOfResonance {
-        bytes32 userStateHash;
-        uint256 evaluatedPsi;
-        uint256 frequencyHz;
-        bytes32 node19Sentinel;
-        bytes signature;
+        bytes32 userStateHash;      // Hash del estado dinámico biométrico/ARN
+        uint256 evaluatedPsi;       // Coherencia de fase evaluada (Escala 1e6)
+        uint256 frequencyMicroHz;   // Frecuencia medida en micro-Hz
+        bytes32 node19Sentinel;     // Hash de cierre del Nodo Centinela (∇Ξ)
+        uint256 nonce;              // Nonce de fase para prevención de replay attacks
+        uint256 timestamp;          // Marca temporal de la prueba (Unix timestamp)
+        bytes signature;            // Firma compacta (r, s, v) del Secure Enclave
     }
 
-    // ──────────────────────────────────────────────
-    //  State
-    // ──────────────────────────────────────────────
+    // ================================================================
+    //  ALMACENAMIENTO
+    // ================================================================
 
-    /// @notice Track used nonces (node19Sentinel) for replay protection
+    /// @notice Dirección pública autorizada del Secure Enclave / Enclave Validador
+    address public immutable enclaveSigner;
+
+    /// @notice Registro de nonces consumidos para prevenir ataques de replay
     mapping(bytes32 => bool) public usedNonces;
 
-    /// @notice Contract owner
-    address public owner;
+    // ================================================================
+    //  EVENTOS
+    // ================================================================
 
-    /// @notice Whether the contract is paused
-    bool public paused;
-
-    // ──────────────────────────────────────────────
-    //  Events
-    // ──────────────────────────────────────────────
-
-    /// @notice Emitted when a resonance proof is verified successfully
     event ResonanceVerified(
+        address indexed caller,
         bytes32 indexed userStateHash,
         uint256 evaluatedPsi,
-        uint256 frequencyHz,
-        bytes32 node19Sentinel,
-        address indexed verifier,
+        uint256 frequencyMicroHz,
         uint256 timestamp
     );
 
-    /// @notice Emitted when verification fails
     event ResonanceRejected(
         bytes32 indexed userStateHash,
         string reason
     );
 
-    /// @notice Emitted when nonce is replayed
-    event NonceReplayAttempt(
-        bytes32 indexed node19Sentinel,
-        address indexed attacker
-    );
+    // ================================================================
+    //  ERRORES PERSONALIZADOS (Gas Efficient)
+    // ================================================================
 
-    // ──────────────────────────────────────────────
-    //  Errors
-    // ──────────────────────────────────────────────
+    error InsufficientCoherence(uint256 actual, uint256 required);
+    error FrequencyOutOfRange(uint256 actual, uint256 target);
+    error InvalidSentinelNode();
+    error NonceAlreadyUsed(bytes32 nonceHash);
+    error ProofExpired(uint256 timestamp, uint256 maxAge);
+    error InvalidEnclaveSignature();
 
-    error PsiBelowThreshold(uint256 evaluated, uint256 minimum);
-    error FrequencyOutOfTolerance(uint256 measured, uint256 expected, uint256 tolerance);
-    error NonceAlreadyUsed(bytes32 nonce);
-    error ContractPaused();
-    error Unauthorized();
+    // ================================================================
+    //  CONSTRUCTOR
+    // ================================================================
 
-    // ──────────────────────────────────────────────
-    //  Modifiers
-    // ──────────────────────────────────────────────
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert Unauthorized();
-        _;
+    /// @notice Despliega el contrato con la dirección del Secure Enclave autorizada.
+    /// @param _enclaveSigner Dirección pública de la entidad firmante (Secure Enclave).
+    constructor(address _enclaveSigner) {
+        require(_enclaveSigner != address(0), "Enclave signer zero address");
+        enclaveSigner = _enclaveSigner;
     }
 
-    modifier whenNotPaused() {
-        if (paused) revert ContractPaused();
-        _;
-    }
-
-    // ──────────────────────────────────────────────
-    //  Constructor
-    // ──────────────────────────────────────────────
-
-    constructor() {
-        owner = msg.sender;
-    }
-
-    // ──────────────────────────────────────────────
-    //  Core Verification
-    // ──────────────────────────────────────────────
+    // ================================================================
+    //  FUNCIONES PRINCIPALES
+    // ================================================================
 
     /**
-     * @notice Verify a ProofOfResonance against the protocol invariants.
-     * @param proof The ProofOfResonance struct
-     * @return bool True if the proof is valid
-     *
-     * Requirements:
-     * - evaluatedPsi >= 999_999 (scaled, i.e., Ψ >= 0.999999)
-     * - evaluatedPsi <= 1_000_000 (scaled, i.e., Ψ <= 1.0)
-     * - frequencyHz within ±1000 μHz of F0_MICRO_HZ (tolerance ±0.001 Hz)
-     * - node19Sentinel not previously used (anti-replay)
+     * @notice Valida de forma rigurosa la prueba de resonancia QCAL.
+     * @dev Ejecuta 6 verificaciones secuenciales: coherencia, frecuencia,
+     *      ventana temporal, nonce único, cierre de Nodo Centinela, y
+     *      firma criptográfica del Secure Enclave.
+     * @param proof Estructura ProofOfResonance con los parámetros de la prueba.
+     * @return bool True si la prueba satisface todos los criterios.
      */
-    function verifyResonance(
-        ProofOfResonance memory proof
-    ) external whenNotPaused returns (bool) {
-        // 1. Validate Ψ coherency
-        if (proof.evaluatedPsi < MIN_PSI) {
-            emit ResonanceRejected(proof.userStateHash, "Psi below threshold");
-            revert PsiBelowThreshold(proof.evaluatedPsi, MIN_PSI);
+    function verifyResonance(ProofOfResonance calldata proof) external returns (bool) {
+        // ------------------------------------------------------------
+        //  1. VERIFICACIÓN DE COHERENCIA Ψ ≥ 0.999999
+        // ------------------------------------------------------------
+        if (proof.evaluatedPsi < MIN_PSI_COHERENCE) {
+            emit ResonanceRejected(proof.userStateHash, "Psi coherence below threshold");
+            revert InsufficientCoherence(proof.evaluatedPsi, MIN_PSI_COHERENCE);
         }
 
-        if (proof.evaluatedPsi > MAX_PSI) {
-            emit ResonanceRejected(proof.userStateHash, "Psi exceeds max");
-            revert PsiBelowThreshold(proof.evaluatedPsi, MAX_PSI);
+        // ------------------------------------------------------------
+        //  2. VERIFICACIÓN DE FRECUENCIA f₀ = 141.7001 Hz (± tolerancia)
+        // ------------------------------------------------------------
+        if (
+            proof.frequencyMicroHz < TARGET_FREQUENCY_MICRO_HZ - FREQUENCY_TOLERANCE_MICRO_HZ ||
+            proof.frequencyMicroHz > TARGET_FREQUENCY_MICRO_HZ + FREQUENCY_TOLERANCE_MICRO_HZ
+        ) {
+            emit ResonanceRejected(proof.userStateHash, "Frequency out of phase");
+            revert FrequencyOutOfRange(proof.frequencyMicroHz, TARGET_FREQUENCY_MICRO_HZ);
         }
 
-        // 2. Validate base frequency
-        uint256 diff;
-        if (proof.frequencyHz > F0_MICRO_HZ) {
-            diff = proof.frequencyHz - F0_MICRO_HZ;
-        } else {
-            diff = F0_MICRO_HZ - proof.frequencyHz;
+        // ------------------------------------------------------------
+        //  3. VERIFICACIÓN DE VENTANA TEMPORAL (Máximo 5 minutos)
+        // ------------------------------------------------------------
+        if (block.timestamp > proof.timestamp + PROOF_MAX_AGE_SECONDS) {
+            emit ResonanceRejected(proof.userStateHash, "Proof timestamp expired");
+            revert ProofExpired(proof.timestamp, PROOF_MAX_AGE_SECONDS);
         }
 
-        if (diff > FREQUENCY_TOLERANCE) {
-            emit ResonanceRejected(proof.userStateHash, "Frequency out of tolerance");
-            revert FrequencyOutOfTolerance(proof.frequencyHz, F0_MICRO_HZ, FREQUENCY_TOLERANCE);
+        // ------------------------------------------------------------
+        //  4. VERIFICACIÓN DE NONCE ÚNICO (Anti-Replay)
+        // ------------------------------------------------------------
+        bytes32 nonceHash = keccak256(abi.encodePacked(proof.userStateHash, proof.nonce));
+        if (usedNonces[nonceHash]) {
+            emit ResonanceRejected(proof.userStateHash, "Replay attack detected");
+            revert NonceAlreadyUsed(nonceHash);
         }
 
-        // 3. Check nonce uniqueness (Node 19 sentinel as nonce)
-        if (usedNonces[proof.node19Sentinel]) {
-            emit NonceReplayAttempt(proof.node19Sentinel, msg.sender);
-            revert NonceAlreadyUsed(proof.node19Sentinel);
+        // ------------------------------------------------------------
+        //  5. VERIFICACIÓN DE CIERRE DEL NODO CENTINELA 19 (∇Ξ)
+        // ------------------------------------------------------------
+        bytes32 expectedSentinel = keccak256(
+            abi.encodePacked(
+                "QCAL_NODE_19_SENTINEL",
+                proof.userStateHash,
+                proof.evaluatedPsi
+            )
+        );
+        if (proof.node19Sentinel != expectedSentinel) {
+            emit ResonanceRejected(proof.userStateHash, "Invalid Node 19 Sentinel");
+            revert InvalidSentinelNode();
         }
 
-        // 4. Mark nonce as used
-        usedNonces[proof.node19Sentinel] = true;
+        // ------------------------------------------------------------
+        //  6. VERIFICACIÓN CRIPTOGRÁFICA DE LA FIRMA DEL SECURE ENCLAVE
+        // ------------------------------------------------------------
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                proof.userStateHash,
+                proof.evaluatedPsi,
+                proof.frequencyMicroHz,
+                proof.node19Sentinel,
+                proof.nonce,
+                proof.timestamp,
+                block.chainid
+            )
+        );
 
-        // 5. Emit success event
+        bytes32 ethSignedMessageHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
+        );
+
+        if (recoverSigner(ethSignedMessageHash, proof.signature) != enclaveSigner) {
+            emit ResonanceRejected(proof.userStateHash, "Invalid signature");
+            revert InvalidEnclaveSignature();
+        }
+
+        // ------------------------------------------------------------
+        //  MARCAR NONCE COMO CONSUMIDO
+        // ------------------------------------------------------------
+        usedNonces[nonceHash] = true;
+
         emit ResonanceVerified(
+            msg.sender,
             proof.userStateHash,
             proof.evaluatedPsi,
-            proof.frequencyHz,
-            proof.node19Sentinel,
-            msg.sender,
-            block.timestamp
+            proof.frequencyMicroHz,
+            proof.timestamp
         );
 
         return true;
     }
 
+    // ================================================================
+    //  HELPER: RECUPERACIÓN DE FIRMA ECDSA
+    // ================================================================
+
     /**
-     * @notice Check if a proof would be valid without consuming the nonce.
-     * @param proof The ProofOfResonance struct
-     * @return bool True if the proof would pass verification
+     * @notice Recupera la dirección del firmante a partir de un hash y una firma ECDSA.
+     * @param _ethSignedMessageHash Hash del mensaje firmado con prefijo Ethereum.
+     * @param _sig Firma compacta de 65 bytes (r, s, v).
+     * @return address Dirección del firmante recuperada.
      */
-    function previewVerification(
-        ProofOfResonance memory proof
-    ) external view returns (bool) {
-        if (proof.evaluatedPsi < MIN_PSI || proof.evaluatedPsi > MAX_PSI) {
-            return false;
+    function recoverSigner(
+        bytes32 _ethSignedMessageHash,
+        bytes memory _sig
+    ) internal pure returns (address) {
+        if (_sig.length != 65) {
+            return address(0);
         }
 
-        uint256 diff;
-        if (proof.frequencyHz > F0_MICRO_HZ) {
-            diff = proof.frequencyHz - F0_MICRO_HZ;
-        } else {
-            diff = F0_MICRO_HZ - proof.frequencyHz;
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+
+        assembly {
+            r := mload(add(_sig, 32))
+            s := mload(add(_sig, 64))
+            v := byte(0, mload(add(_sig, 96)))
         }
 
-        if (diff > FREQUENCY_TOLERANCE) {
-            return false;
+        if (v < 27) {
+            v += 27;
         }
 
-        if (usedNonces[proof.node19Sentinel]) {
-            return false;
+        if (v != 27 && v != 28) {
+            return address(0);
         }
 
-        return true;
+        return ecrecover(_ethSignedMessageHash, v, r, s);
     }
 
-    // ──────────────────────────────────────────────
-    //  Admin
-    // ──────────────────────────────────────────────
+    // ================================================================
+    //  FUNCIONES DE CONSULTA
+    // ================================================================
 
-    /**
-     * @notice Pause or unpause the contract.
-     * @param _paused Whether to pause
-     */
-    function setPaused(bool _paused) external onlyOwner {
-        paused = _paused;
-    }
-
-    /**
-     * @notice Transfer ownership.
-     * @param newOwner Address of new owner
-     */
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "New owner cannot be zero address");
-        owner = newOwner;
+    /// @notice Verifica si un nonce específico ya ha sido utilizado.
+    /// @param userStateHash Hash del estado de usuario.
+    /// @param nonce Nonce a verificar.
+    /// @return bool True si el nonce ya fue consumido.
+    function isNonceUsed(bytes32 userStateHash, uint256 nonce) external view returns (bool) {
+        bytes32 nonceHash = keccak256(abi.encodePacked(userStateHash, nonce));
+        return usedNonces[nonceHash];
     }
 }
