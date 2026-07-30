@@ -225,14 +225,14 @@ contract PayGateCatedral {
     // ──────────────────────────────────────────────
 
     /**
-     * @notice Purchase a service with a ProofOfResonance.
+     * @notice Purchase a service with a Proof.
      * @param serviceKey Service to purchase
-     * @param proof ProofOfResonance struct
+     * @param proof Proof struct
      * @param duration Duration of activation in seconds (0 = service default)
      */
     function purchaseService(
         string memory serviceKey,
-        QCALResonanceVerifier.ProofOfResonance memory proof,
+        QCALResonanceVerifier.Proof memory proof,
         uint256 duration
     ) external payable whenNotPaused {
         Service storage svc = services[serviceKey];
