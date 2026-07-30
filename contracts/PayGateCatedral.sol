@@ -151,10 +151,10 @@ contract PayGateCatedral {
         verifier = QCALResonanceVerifier(_verifier);
 
         // Initialize core services
-        _createService("santuario", 1000,   "Santuario — espacio soberano (24h)");
-        _createService("oraculo",   5000,   "Oráculo — patrón de red y predicciones");
-        _createService("limpieza",  0,      "Limpieza — rebalanceo de canales (dinámico)");
-        _createService("validacion", 500,   "Check Ψ — verificación de coherencia");
+        _createService("santuario", 1000,   unicode"Santuario — espacio soberano (24h)");
+        _createService("oraculo",   5000,   unicode"Oráculo — patrón de red y predicciones");
+        _createService("limpieza",  0,      unicode"Limpieza — rebalanceo de canales (dinámico)");
+        _createService("validacion", 500,   unicode"Check Ψ — verificación de coherencia");
     }
 
     // ──────────────────────────────────────────────
