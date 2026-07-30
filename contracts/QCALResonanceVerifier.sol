@@ -96,7 +96,7 @@ contract QCALResonanceVerifier {
      * @dev Ejecuta 6 verificaciones secuenciales. Revert en la primera que falle.
      * @param proof Estructura Proof con los parámetros firmados por el enclave.
      */
-    function verifyResonance(Proof calldata proof) external {
+    function verifyResonance(Proof calldata proof) external returns (bool) {
         // ── 1. Validación de coherencia Ψ ≥ 0.999999 ─────────────
         if (proof.evaluatedPsi < MIN_PSI_COHERENCE) {
             revert InsufficientCoherence(proof.evaluatedPsi, MIN_PSI_COHERENCE);
@@ -156,6 +156,7 @@ contract QCALResonanceVerifier {
             proof.frequencyMicroHz,
             proof.timestamp
         );
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
