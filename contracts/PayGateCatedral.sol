@@ -19,7 +19,7 @@ contract PayGateCatedral {
     // ──────────────────────────────────────────────
 
     /// @notice Sello del protocolo
-    string public constant SELLO = "∴𓂀Ω∞³Φ · TUYOYOTU · HECHO ESTÁ";
+    string public constant SELLO = unicode"∴𓂀Ω∞³Φ · TUYOYOTU · HECHO ESTÁ";
 
     /// @notice Fee denominator for percentage calculations (100% = 10000)
     uint256 public constant FEE_DENOMINATOR = 10000;
